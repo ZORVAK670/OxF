@@ -9,6 +9,12 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "PUT_YOUR_BOT_TOKEN_HERE")
 # Comma separated list of admin Telegram user IDs, e.g. "123456789,987654321"
 ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()]
 
+# ==== Mandatory Join Gate ====
+# Users must join this channel before they can use the bot at all.
+# Must be the @username of a channel where the bot is an admin. Leave empty to disable.
+REQUIRED_CHANNEL = os.getenv("REQUIRED_CHANNEL", "")
+REQUIRED_CHANNEL_DISPLAY = os.getenv("REQUIRED_CHANNEL_DISPLAY", "")
+
 # ==== Economy Settings ====
 # How many points = 1 USDT
 POINTS_PER_USDT = int(os.getenv("POINTS_PER_USDT", "1000"))
