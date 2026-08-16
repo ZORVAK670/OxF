@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
+import os
+import threading
 import time
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,6 +14,7 @@ from telegram.ext import (
 import config
 import db
 from lang import t
+from webhook import flask_app
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ def main_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
          InlineKeyboardButton(t("menu_referral", lang), callback_data="referral")],
         [InlineKeyboardButton(t("menu_balance", lang), callback_data="balance"),
          InlineKeyboardButton(t("menu_withdraw", lang), callback_data="withdraw_start")],
+        [InlineKeyboardButton(t("menu_watch_ads", lang), callback_data="watch_ads")],
         [InlineKeyboardButton(t("menu_language", lang), callback_data="change_lang")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -47,6 +51,63 @@ def lang_keyboard() -> InlineKeyboardMarkup:
 def user_lang(user_id: int) -> str:
     u = db.get_user(user_id)
     return u["lang"] if u else "en"
+
+
+def join_gate_keyboard(lang: str) -> InlineKeyboardMarkup:
+    channel_display = config.REQUIRED_CHANNEL_DISPLAY or config.REQUIRED_CHANNEL
+    channel_url = f"https://t.me/{config.REQUIRED_CHANNEL.lstrip('@')}"
+    rows = [
+        [InlineKeyboardButton(t("join_channel_btn", lang), url=channel_url)],
+        [InlineKeyboardButton(t("verify_join_btn", lang), callback_data="verify_required_join")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+async def is_joined_required_channel(context: ContextTypes.DEFAULT_TYPE, user_id: int) -> bool:
+    if not config.REQUIRED_CHANNEL:
+        return True
+    try:
+        member = await context.bot.get_chat_member(config.REQUIRED_CHANNEL, user_id)
+        return member.status in ("member", "administrator", "creator")
+    except Exception as e:
+        logger.warning(f"required channel check failed: {e}")
+        return False
+
+
+async def ensure_joined(update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    """Call at the top of any handler that requires channel membership.
+    Sends the join prompt and returns False if the user hasn't joined yet."""
+    user_id = update.effective_user.id
+    if await is_joined_required_channel(context, user_id):
+        return True
+    lang = user_lang(user_id)
+    channel_display = config.REQUIRED_CHANNEL_DISPLAY or config.REQUIRED_CHANNEL
+    msg = t("required_join_prompt", lang, channel=channel_display)
+    kb = join_gate_keyboard(lang)
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.message.reply_text(msg, reply_markup=kb)
+    else:
+        await update.message.reply_text(msg, reply_markup=kb)
+    return False
+
+
+async def verify_required_join_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    lang = user_lang(user_id)
+    if await is_joined_required_channel(context, user_id):
+        await query.answer()
+        await query.edit_message_text(
+            t("welcome", lang, name=query.from_user.first_name or "")
+        )
+        await context.bot.send_message(
+            user_id,
+            t("welcome", lang, name=query.from_user.first_name or ""),
+            reply_markup=main_menu_keyboard(lang),
+        )
+    else:
+        await query.answer(t("still_not_joined", lang), show_alert=True)
 
 
 # ---------- /start ----------
@@ -81,6 +142,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(t("choose_language", "en"), reply_markup=lang_keyboard())
     else:
         lang = existing["lang"]
+        if not await is_joined_required_channel(context, tg_user.id):
+            channel_display = config.REQUIRED_CHANNEL_DISPLAY or config.REQUIRED_CHANNEL
+            await update.message.reply_text(
+                t("required_join_prompt", lang, channel=channel_display),
+                reply_markup=join_gate_keyboard(lang),
+            )
+            return
         await update.message.reply_text(
             t("welcome", lang, name=tg_user.first_name or ""),
             reply_markup=main_menu_keyboard(lang),
@@ -92,6 +160,15 @@ async def set_language_callback(update: Update, context: ContextTypes.DEFAULT_TY
     await query.answer()
     lang_code = query.data.replace("setlang_", "")
     db.set_lang(query.from_user.id, lang_code)
+
+    if not await is_joined_required_channel(context, query.from_user.id):
+        channel_display = config.REQUIRED_CHANNEL_DISPLAY or config.REQUIRED_CHANNEL
+        await query.edit_message_text(
+            t("required_join_prompt", lang_code, channel=channel_display),
+            reply_markup=join_gate_keyboard(lang_code),
+        )
+        return
+
     await query.edit_message_text(
         t("welcome", lang_code, name=query.from_user.first_name or ""),
     )
@@ -122,6 +199,8 @@ async def balance_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------- Daily Bonus ----------
 
 async def daily_bonus_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await ensure_joined(update, context):
+        return
     query = update.callback_query
     await query.answer()
     u = db.get_user(query.from_user.id)
@@ -138,6 +217,8 @@ async def daily_bonus_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 # ---------- Referral ----------
 
 async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await ensure_joined(update, context):
+        return
     query = update.callback_query
     await query.answer()
     u = db.get_user(query.from_user.id)
@@ -150,9 +231,44 @@ async def referral_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ---------- Watch Ads ----------
+
+async def watch_ads_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await ensure_joined(update, context):
+        return
+    query = update.callback_query
+    await query.answer()
+    lang = user_lang(query.from_user.id)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(t("ad_watch_btn", lang), callback_data="ad_reward")
+    ]])
+    await query.message.reply_text(
+        t("ad_watch_prompt", lang, points=config.POINTS_AD_VIEW), reply_markup=kb
+    )
+
+
+async def ad_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    lang = user_lang(user_id)
+    u = db.get_user(user_id)
+    now = int(time.time())
+    elapsed = now - (u["last_ad_view"] or 0)
+    if elapsed < config.AD_VIEW_COOLDOWN_SECONDS:
+        remaining = config.AD_VIEW_COOLDOWN_SECONDS - elapsed
+        await query.answer(t("ad_cooldown", lang, seconds=remaining), show_alert=True)
+        return
+    db.add_points(user_id, config.POINTS_AD_VIEW)
+    db.set_last_ad_view(user_id, now)
+    await query.answer()
+    await query.edit_message_text(t("ad_reward_ok", lang, points=config.POINTS_AD_VIEW))
+
+
 # ---------- Tasks (Join Channel) ----------
 
 async def tasks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await ensure_joined(update, context):
+        return
     query = update.callback_query
     await query.answer()
     lang = user_lang(query.from_user.id)
@@ -208,6 +324,8 @@ async def verify_task_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 # ---------- Withdraw Conversation ----------
 
 async def withdraw_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await ensure_joined(update, context):
+        return ConversationHandler.END
     query = update.callback_query
     await query.answer()
     lang = user_lang(query.from_user.id)
@@ -356,8 +474,17 @@ async def back_to_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
                                      reply_markup=main_menu_keyboard(lang))
 
 
+def run_flask_server():
+    port = int(os.environ.get("PORT", 8080))
+    flask_app.run(host="0.0.0.0", port=port)
+
+
 def main():
     db.init_db()
+
+    flask_thread = threading.Thread(target=run_flask_server, daemon=True)
+    flask_thread.start()
+
     app = Application.builder().token(config.BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -369,6 +496,9 @@ def main():
     app.add_handler(CallbackQueryHandler(daily_bonus_callback, pattern="^daily_bonus$"))
     app.add_handler(CallbackQueryHandler(referral_callback, pattern="^referral$"))
     app.add_handler(CallbackQueryHandler(tasks_callback, pattern="^menu_tasks$"))
+    app.add_handler(CallbackQueryHandler(verify_required_join_callback, pattern="^verify_required_join$"))
+    app.add_handler(CallbackQueryHandler(watch_ads_callback, pattern="^watch_ads$"))
+    app.add_handler(CallbackQueryHandler(ad_reward_callback, pattern="^ad_reward$"))
     app.add_handler(CallbackQueryHandler(verify_task_callback, pattern="^verify_"))
 
     withdraw_conv = ConversationHandler(
