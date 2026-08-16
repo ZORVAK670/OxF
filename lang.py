@@ -19,6 +19,37 @@ TEXTS = {
     "menu_balance": {"fa": "💰 موجودی", "ps": "💰 بیلانس", "en": "💰 Balance"},
     "menu_withdraw": {"fa": "💵 برداشت", "ps": "💵 وتل", "en": "💵 Withdraw"},
     "menu_language": {"fa": "🌐 تغییر زبان", "ps": "🌐 د ژبې بدلون", "en": "🌐 Change Language"},
+    "menu_watch_ads": {"fa": "📺 تماشای تبلیغ", "ps": "📺 اډ لیدل", "en": "📺 Watch Ads"},
+
+    "required_join_prompt": {
+        "fa": "🔒 برای استفاده از ربات، ابتدا باید عضو کانال ما شوید:\n{channel}\n\nپس از عضویت، روی «بررسی» کلیک کنید.",
+        "ps": "🔒 د ربات کارولو دپاره لومړی باید زموږ چینل ته جوائن شئ:\n{channel}\n\nد جوائن کولو وروسته «چک کول» کیکل کړئ.",
+        "en": "🔒 To use this bot, you must first join our channel:\n{channel}\n\nAfter joining, tap 'Verify'.",
+    },
+    "join_channel_btn": {"fa": "📺 عضویت در کانال", "ps": "📺 چینل ته جوائن", "en": "📺 Join Channel"},
+    "verify_join_btn": {"fa": "✅ بررسی عضویت", "ps": "✅ چک کول", "en": "✅ Verify"},
+    "still_not_joined": {
+        "fa": "❌ هنوز عضو نشده‌اید. لطفاً ابتدا عضو کانال شوید.",
+        "ps": "❌ تر اوسه جوائن شوي نه یاست. مهرباني وکړئ لومړی جوائن شئ.",
+        "en": "❌ You haven't joined yet. Please join the channel first.",
+    },
+
+    "ad_watch_prompt": {
+        "fa": "📺 برای دریافت {points} امتیاز، روی دکمه زیر کلیک کنید و چند ثانیه صبر کنید.",
+        "ps": "📺 د {points} امتیازاتو د ترلاسه کولو لپاره لاندې تڼۍ کیکل کړئ او یو څو ثانیې صبر وکړئ.",
+        "en": "📺 Tap the button below and wait a few seconds to earn {points} points.",
+    },
+    "ad_watch_btn": {"fa": "▶️ تماشای تبلیغ", "ps": "▶️ اډ لیدل", "en": "▶️ Watch Ad"},
+    "ad_reward_ok": {
+        "fa": "✅ {points} امتیاز دریافت کردید!",
+        "ps": "✅ تاسو ته {points} امتیازات ورکړل شول!",
+        "en": "✅ You earned {points} points!",
+    },
+    "ad_cooldown": {
+        "fa": "⏳ لطفاً {seconds} ثانیه دیگر صبر کنید.",
+        "ps": "⏳ مهرباني وکړئ نور {seconds} ثانیې صبر وکړئ.",
+        "en": "⏳ Please wait {seconds} more seconds.",
+    },
 
     "balance_msg": {
         "fa": "💰 موجودی شما: {points} امتیاز\n(معادل تقریبی: {usdt} USDT)",
