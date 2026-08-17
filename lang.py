@@ -20,13 +20,14 @@ TEXTS = {
     "menu_withdraw": {"fa": "💵 برداشت", "ps": "💵 وتل", "en": "💵 Withdraw"},
     "menu_language": {"fa": "🌐 تغییر زبان", "ps": "🌐 د ژبې بدلون", "en": "🌐 Change Language"},
     "menu_watch_ads": {"fa": "📺 تماشای تبلیغ", "ps": "📺 اډ لیدل", "en": "📺 Watch Ads"},
+    "menu_support": {"fa": "🆘 پشتیبانی", "ps": "🆘 مرسته", "en": "🆘 Support"},
 
     "required_join_prompt": {
-        "fa": "🔒 برای استفاده از ربات، ابتدا باید عضو کانال ما شوید:\n{channel}\n\nپس از عضویت، روی «بررسی» کلیک کنید.",
-        "ps": "🔒 د ربات کارولو دپاره لومړی باید زموږ چینل ته جوائن شئ:\n{channel}\n\nد جوائن کولو وروسته «چک کول» کیکل کړئ.",
-        "en": "🔒 To use this bot, you must first join our channel:\n{channel}\n\nAfter joining, tap 'Verify'.",
+        "fa": "🔒 برای استفاده از ربات، ابتدا باید عضو کانال/گروه ما شوید:\n{channel}\n\nپس از عضویت، روی «بررسی» کلیک کنید.",
+        "ps": "🔒 د ربات کارولو دپاره لومړی باید زموږ چینل/ګروپ ته جوائن شئ:\n{channel}\n\nد جوائن کولو وروسته «چک کول» کیکل کړئ.",
+        "en": "🔒 To use this bot, you must first join our channel/group:\n{channel}\n\nAfter joining, tap 'Verify'.",
     },
-    "join_channel_btn": {"fa": "📺 عضویت در کانال", "ps": "📺 چینل ته جوائن", "en": "📺 Join Channel"},
+    "join_channel_btn": {"fa": "📺 عضویت", "ps": "📺 جوائن", "en": "📺 Join"},
     "verify_join_btn": {"fa": "✅ بررسی عضویت", "ps": "✅ چک کول", "en": "✅ Verify"},
     "still_not_joined": {
         "fa": "❌ هنوز عضو نشده‌اید. لطفاً ابتدا عضو کانال شوید.",
@@ -49,6 +50,16 @@ TEXTS = {
         "fa": "⏳ لطفاً {seconds} ثانیه دیگر صبر کنید.",
         "ps": "⏳ مهرباني وکړئ نور {seconds} ثانیې صبر وکړئ.",
         "en": "⏳ Please wait {seconds} more seconds.",
+    },
+    "no_ads_available": {
+        "fa": "😕 در حال حاضر تبلیغی موجود نیست. بعداً دوباره امتحان کنید.",
+        "ps": "😕 اوس مهال هېڅ اډ نشته. بیا وروسته هڅه وکړئ.",
+        "en": "😕 No ads available right now. Please try again later.",
+    },
+    "support_msg": {
+        "fa": "🆘 برای پشتیبانی با ادمین در تماس شوید:\n{contact}",
+        "ps": "🆘 د مرستې لپاره ادمین سره اړیکه ونیسئ:\n{contact}",
+        "en": "🆘 For support, contact the admin:\n{contact}",
     },
 
     "balance_msg": {
@@ -74,9 +85,9 @@ TEXTS = {
         "en": "No tasks available right now.",
     },
     "task_join_prompt": {
-        "fa": "📺 عضو کانال زیر شوید سپس روی «بررسی» کلیک کنید:\n{channel}",
-        "ps": "📺 لاندې چینل ته جوائن شئ او بیا «چک کول» کیکل کړئ:\n{channel}",
-        "en": "📺 Join this channel then tap 'Verify':\n{channel}",
+        "fa": "📺 عضو کانال/گروه زیر شوید سپس روی «بررسی» کلیک کنید:\n{channel}",
+        "ps": "📺 لاندې چینل/ګروپ ته جوائن شئ او بیا «چک کول» کیکل کړئ:\n{channel}",
+        "en": "📺 Join this channel/group then tap 'Verify':\n{channel}",
     },
     "verify_btn": {"fa": "✅ بررسی عضویت", "ps": "✅ د غړیتوب چک", "en": "✅ Verify Membership"},
     "task_success": {
@@ -85,9 +96,9 @@ TEXTS = {
         "en": "✅ Great! You earned {points} points.",
     },
     "task_not_joined": {
-        "fa": "❌ شما هنوز عضو کانال نشده‌اید. لطفاً ابتدا عضو شوید.",
-        "ps": "❌ تاسو تر اوسه چینل ته جوائن شوي نه یاست. لومړی جوائن شئ.",
-        "en": "❌ You haven't joined the channel yet. Please join first.",
+        "fa": "❌ شما هنوز عضو نشده‌اید. لطفاً ابتدا عضو شوید.",
+        "ps": "❌ تاسو تر اوسه جوائن شوي نه یاست. لومړی جوائن شئ.",
+        "en": "❌ You haven't joined yet. Please join first.",
     },
     "task_already_done": {
         "fa": "ℹ️ شما قبلاً این وظیفه را انجام داده‌اید.",
