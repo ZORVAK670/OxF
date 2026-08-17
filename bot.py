@@ -356,7 +356,7 @@ async def tasks_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton(t("verify_btn", lang), callback_data=f"verify_{task['task_id']}")
         ]])
         await query.message.reply_text(
-            t("task_join_prompt", lang, channel=task["channel_display"] or task["channel_username"]),
+            t("task_join_prompt", lang, channel=task["channel_display"] or task["https://t.me/officialZORVAKChannel"]),
             reply_markup=kb,
         )
 
