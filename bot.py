@@ -4,6 +4,7 @@ import os
 import threading
 import time
 
+import httpx
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -34,6 +35,7 @@ def main_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(t("menu_balance", lang), callback_data="balance"),
          InlineKeyboardButton(t("menu_withdraw", lang), callback_data="withdraw_start")],
         [InlineKeyboardButton(t("menu_watch_ads", lang), callback_data="watch_ads")],
+        [InlineKeyboardButton(t("menu_support", lang), callback_data="support")],
         [InlineKeyboardButton(t("menu_language", lang), callback_data="change_lang")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -130,15 +132,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not existing:
         db.create_user(tg_user.id, tg_user.username or "", tg_user.first_name or "", referred_by)
         if referred_by and db.get_user(referred_by):
-            db.add_points(referred_by, config.POINTS_REFERRAL)
-            try:
-                ref_lang = user_lang(referred_by)
-                await context.bot.send_message(
-                    referred_by,
-                    "🎉 " + t("task_success", ref_lang, points=config.POINTS_REFERRAL)
-                )
-            except Exception:
-                pass
+            db.create_referral_pending(tg_user.id, referred_by)
+            uname = f"@{tg_user.username}" if tg_user.username else "(no username)"
+            for admin_id in config.ADMIN_IDS:
+                try:
+                    kb = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("✅ Approve", callback_data=f"refapprove_{tg_user.id}"),
+                        InlineKeyboardButton("❌ Reject", callback_data=f"refreject_{tg_user.id}"),
+                    ]])
+                    await context.bot.send_message(
+                        admin_id,
+                        f"👥 New referral pending approval\n"
+                        f"New user: {tg_user.first_name or ''} {uname} (ID: {tg_user.id})\n"
+                        f"Referred by: {referred_by}",
+                        reply_markup=kb,
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not notify admin {admin_id} about referral: {e}")
         await update.message.reply_text(t("choose_language", "en"), reply_markup=lang_keyboard())
     else:
         lang = existing["lang"]
@@ -239,12 +249,66 @@ async def watch_ads_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     lang = user_lang(query.from_user.id)
-    kb = InlineKeyboardMarkup([[
-        InlineKeyboardButton(t("ad_watch_btn", lang), callback_data="ad_reward")
-    ]])
-    await query.message.reply_text(
-        t("ad_watch_prompt", lang, points=config.POINTS_AD_VIEW), reply_markup=kb
-    )
+    user_id = query.from_user.id
+
+    if not config.ADSGRAM_TOKEN or not config.ADSGRAM_BLOCK_ID:
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(t("ad_watch_btn", lang), callback_data="ad_reward")
+        ]])
+        await query.message.reply_text(
+            t("ad_watch_prompt", lang, points=config.POINTS_AD_VIEW), reply_markup=kb
+        )
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                "https://api.adsgram.ai/advbot",
+                params={
+                    "tgid": user_id,
+                    "blockid": config.ADSGRAM_BLOCK_ID,
+                    "language": lang,
+                    "token": config.ADSGRAM_TOKEN,
+                },
+            )
+        data = resp.json() if resp.status_code == 200 else None
+    except Exception as e:
+        logger.warning(f"AdsGram fetch failed: {e}")
+        data = None
+
+    if not data:
+        await query.message.reply_text(t("no_ads_available", lang))
+        return
+
+    banner = data.get("banner", data)
+    text_html = banner.get("text_html") or banner.get("text") or ""
+    click_url = banner.get("click_url")
+    button_name = banner.get("button_name") or "Learn more"
+    image_url = banner.get("image_url")
+    button_reward_name = banner.get("button_reward_name") or t("ad_watch_btn", lang)
+    reward_url = banner.get("reward_url")
+
+    kb_rows = []
+    if click_url:
+        kb_rows.append([InlineKeyboardButton(button_name, url=click_url)])
+    if reward_url:
+        kb_rows.append([InlineKeyboardButton(button_reward_name, url=reward_url)])
+
+    if not kb_rows:
+        await query.message.reply_text(t("no_ads_available", lang))
+        return
+
+    kb = InlineKeyboardMarkup(kb_rows)
+    caption = text_html or t("ad_watch_prompt", lang, points=config.POINTS_AD_VIEW)
+
+    try:
+        if image_url:
+            await query.message.reply_photo(image_url, caption=caption, reply_markup=kb, parse_mode=ParseMode.HTML)
+        else:
+            await query.message.reply_text(caption, reply_markup=kb, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        logger.warning(f"Could not render AdsGram ad: {e}")
+        await query.message.reply_text(caption, reply_markup=kb)
 
 
 async def ad_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -262,6 +326,14 @@ async def ad_reward_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     db.set_last_ad_view(user_id, now)
     await query.answer()
     await query.edit_message_text(t("ad_reward_ok", lang, points=config.POINTS_AD_VIEW))
+
+
+async def support_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    lang = user_lang(query.from_user.id)
+    contact = f"@{config.SUPPORT_USERNAME}" if config.SUPPORT_USERNAME else "-"
+    await query.message.reply_text(t("support_msg", lang, contact=contact))
 
 
 # ---------- Tasks (Join Channel) ----------
@@ -387,6 +459,47 @@ async def withdraw_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+# ---------- Referral Approval (Admin) ----------
+
+async def referral_approve_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not is_admin(query.from_user.id):
+        await query.answer()
+        return
+    referred_id = int(query.data.replace("refapprove_", ""))
+    ref = db.get_referral(referred_id)
+    if not ref or ref["status"] != "pending":
+        await query.answer("Already processed or not found.", show_alert=True)
+        return
+    db.set_referral_status(referred_id, "approved")
+    db.add_points(ref["referrer_id"], config.POINTS_REFERRAL)
+    await query.answer("Approved ✅")
+    await query.edit_message_text(query.message.text + "\n\n✅ APPROVED")
+    try:
+        ref_lang = user_lang(ref["referrer_id"])
+        await context.bot.send_message(
+            ref["referrer_id"],
+            "🎉 " + t("task_success", ref_lang, points=config.POINTS_REFERRAL)
+        )
+    except Exception as e:
+        logger.warning(f"Could not notify referrer: {e}")
+
+
+async def referral_reject_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not is_admin(query.from_user.id):
+        await query.answer()
+        return
+    referred_id = int(query.data.replace("refreject_", ""))
+    ref = db.get_referral(referred_id)
+    if not ref or ref["status"] != "pending":
+        await query.answer("Already processed or not found.", show_alert=True)
+        return
+    db.set_referral_status(referred_id, "rejected")
+    await query.answer("Rejected ❌")
+    await query.edit_message_text(query.message.text + "\n\n❌ REJECTED")
+
+
 # ---------- Admin Commands ----------
 
 def is_admin(user_id: int) -> bool:
@@ -394,7 +507,8 @@ def is_admin(user_id: int) -> bool:
 
 
 async def admin_add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Usage: /addtask @channelusername Display Name | points"""
+    """Usage: /addtask @channel_or_group_username Display Name | points
+    Works for both channels and groups (bot must be admin there)."""
     if not is_admin(update.effective_user.id):
         return
     try:
@@ -410,8 +524,10 @@ async def admin_add_task(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Task #{task_id} added: {username} ({points} pts)")
     except Exception:
         await update.message.reply_text(
-            "Usage:\n/addtask @channelusername Display Name | points\n"
-            "Example:\n/addtask @mychannel My Channel | 50"
+            "Usage (works for channels AND groups):\n"
+            "/addtask @username Display Name | points\n"
+            "Example:\n/addtask @mychannel My Channel | 50\n"
+            "/addtask @mygroup My Group | 50"
         )
 
 
@@ -498,8 +614,11 @@ def main():
     app.add_handler(CallbackQueryHandler(tasks_callback, pattern="^menu_tasks$"))
     app.add_handler(CallbackQueryHandler(verify_required_join_callback, pattern="^verify_required_join$"))
     app.add_handler(CallbackQueryHandler(watch_ads_callback, pattern="^watch_ads$"))
+    app.add_handler(CallbackQueryHandler(support_callback, pattern="^support$"))
     app.add_handler(CallbackQueryHandler(ad_reward_callback, pattern="^ad_reward$"))
     app.add_handler(CallbackQueryHandler(verify_task_callback, pattern="^verify_"))
+    app.add_handler(CallbackQueryHandler(referral_approve_callback, pattern="^refapprove_"))
+    app.add_handler(CallbackQueryHandler(referral_reject_callback, pattern="^refreject_"))
 
     withdraw_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(withdraw_start, pattern="^withdraw_start$")],
